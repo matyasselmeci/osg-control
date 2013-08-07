@@ -284,9 +284,9 @@ class Services(object):
         @return: 0 for success, integer describing number of errors otherwise
         """
 
-        restart_errors = self.apply_action(command_template, service)
+        restart_errors = self.stop(service)
         time.sleep(5)
-        errors = self.apply_action(command_template, service)
+        errors = self.start(service)
         restart_errors += errors
 
         return restart_errors
@@ -368,7 +368,7 @@ class Services(object):
 
         @return: 0 for success, integer describing number of errors otherwise
         """
-        result_dict = {}
+
         errors = 0
         if service:
             command = command_template % service
@@ -393,7 +393,7 @@ class Services(object):
                 except CalledProcessError, cpe:
                     self.pretty_print(command, cpe.output)
                     errors += 1
-            return errors
+        return errors
 
     def pretty_print(self, command, output):
         """
