@@ -252,7 +252,8 @@ class Services(object):
         @return: 0 for success, integer describing number of errors otherwise
         """
         command_template = "/sbin/service %s start"
-        errors = self.apply_action(command_template, service)
+        order = ['condor-cron', 'rsv']
+        errors = self.apply_action(command_template, service, order)
 
         return errors
 
@@ -267,7 +268,8 @@ class Services(object):
         @return: 0 for success, integer describing number of errors otherwise
         """
         command_template = "/sbin/service %s stop"
-        errors = self.apply_action(command_template, service)
+        order = ['rsv', 'condor-cron']
+        errors = self.apply_action(command_template, service, order)
 
         return errors
 
@@ -352,7 +354,21 @@ class Services(object):
 
         return 0
 
-    def apply_action(self, command_template, service):
+    def depsorted_services(self, deps):
+        """
+        Returns service names sorted in dependency order
+
+        Currently this is only used to ensure rsv gets started after and
+        stopped before condor-cron, so the implementation is pretty simple.
+        """
+        names = self.valid_services
+        prio = dict(zip(names, range(len(names))))
+        for s1,s2 in deps:
+          if s1 in prio and s2 in prio and prio[s1] >= prio[s2]:
+              prio[s1] = prio[s2] - 0.1
+        return sorted(names, key=prio.get)
+
+    def apply_action(self, command_template, service, *deps):
         """
         Each "action" function creates a template of a command and passes the 
         template and an optional service name to this function.  This function
@@ -383,7 +399,7 @@ class Services(object):
         else: 
             # no service specified, so we will loop through all valid services 
             # and apply the action to each one
-            for s in self.valid_services:
+            for s in self.depsorted_services(deps):
                 command = command_template % s
                 cmd = command.split()
                 try:
