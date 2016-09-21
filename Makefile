@@ -35,18 +35,7 @@ clean:
 	rm -rf $(DIST_DIR) $(PACKAGE)-*.tar.gz
 
 $(TARBALL_NAME):
-	@# Ignore unversioned '?' files, complain about any other changes
-	@if svn_status=$$(svn status 2>&1 | grep '^[^?]'); then \
-	  echo "Uncommitted changes detected; please svn commit them first:"; \
-	  echo "$$svn_status"; \
-	else \
-	  rm -rf $(DIST_DIR); \
-	  mkdir $(DIST_DIR); \
-	  svn export . $(DIST_DIR)/$(TARBALL_DIR); \
-	  rm $(DIST_DIR)/$(TARBALL_DIR)/Makefile; \
-	  tar czfC $(TARBALL_NAME) $(DIST_DIR) $(TARBALL_DIR); \
-	  rm -rf $(DIST_DIR); \
-	fi
+	git archive --prefix=$(TARBALL_DIR)/ HEAD --output=$(TARBALL_NAME)
 
 dist: $(TARBALL_NAME)
 
