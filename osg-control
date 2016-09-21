@@ -1,11 +1,13 @@
 #!/usr/bin/python
 import optparse
 import os
+import pipes
+import re
 import sys
 import time
 
 from subprocess import Popen
-from subprocess import PIPE
+from subprocess import STDOUT, PIPE
 
 class InvalidOptionError(Exception): pass
 class ServiceError(Exception): pass
@@ -26,6 +28,35 @@ class CalledProcessError(Exception):
         self.output = output
     def __str__(self):
         return "Command '%s' returned non-zero exit status %d" % (self.cmd, self.returncode)
+
+
+_el_release = None
+def el_release():
+    """Return the major version of the Enterprise Linux release the system is
+    running. SL/RHEL/CentOS 6.x will return 6; SL/RHEL/CentOS 7.x will return
+    7.
+
+    """
+    global _el_release
+    if not _el_release:
+        try:
+            with open("/etc/redhat-release", 'r') as release_file:
+                release_text = release_file.read()
+            match = re.search(r"release (\d)", release_text)
+            _el_release = int(match.group(1))
+        except (EnvironmentError, TypeError, ValueError) as e:
+            _log.write("Couldn't determine redhat release: " + str(e) + "\n")
+            sys.exit(1)
+    return _el_release
+
+
+def use_systemctl():
+    """
+    Return True if systemctl commands should be used to manipulate services.
+    This is the case on EL 7 and higher.
+    """
+    return el_release() >= 7
+
 
 # including this function from python 2.7 since RHEL5 and variants don't have it 
 def check_output(*popenargs, **kwargs):
@@ -223,6 +254,7 @@ Services that may not be controlled:
                       "%s" % str(cpe)
             raise InvalidOptionError(err_msg)
 
+
 class Services(object):
     """
     This class interfaces with SysV init style services.
@@ -251,7 +283,10 @@ class Services(object):
 
         @return: 0 for success, integer describing number of errors otherwise
         """
-        command_template = "/sbin/service %s start"
+        if use_systemctl():
+            command_template = "/usr/bin/systemctl start %(service)s && /usr/bin/systemctl is-active %(service)s"
+        else:
+            command_template = "/sbin/service %(service)s start"
         order = ['condor-cron', 'rsv']
         errors = self.apply_action(command_template, service, order)
 
@@ -267,7 +302,10 @@ class Services(object):
 
         @return: 0 for success, integer describing number of errors otherwise
         """
-        command_template = "/sbin/service %s stop"
+        if use_systemctl():
+            command_template = "/usr/bin/systemctl stop %(service)s && /usr/bin/systemctl is-active %(service)s"
+        else:
+            command_template = "/sbin/service %(service)s stop"
         order = ['rsv', 'condor-cron']
         errors = self.apply_action(command_template, service, order)
 
@@ -303,9 +341,15 @@ class Services(object):
 
         @return: 0 for success, integer describing number of errors otherwise
         """
-        command_template = "/sbin/chkconfig %s on"
+        if use_systemctl():
+            command_template = "/usr/bin/systemctl enable %(service)s"
+        else:
+            command_template = "/sbin/chkconfig %(service)s on"
         errors = self.apply_action(command_template, service)
-        _ = self.apply_action("/sbin/chkconfig --list %s",  service)
+        if use_systemctl():
+            self.apply_action("/usr/bin/systemctl is-enabled %(service)s", service)
+        else:
+            self.apply_action("/sbin/chkconfig --list %(service)s",  service)
         return errors
 
     def disable(self, service):
@@ -318,9 +362,15 @@ class Services(object):
 
         @return: 0 for success, integer describing number of errors otherwise
         """
-        command_template = "/sbin/chkconfig %s off"
+        if use_systemctl():
+            command_template = "/usr/bin/systemctl disable %(service)s"
+        else:
+            command_template = "/sbin/chkconfig %(service)s off"
         errors = self.apply_action(command_template, service)
-        _ = self.apply_action("/sbin/chkconfig --list %s",  service)
+        if use_systemctl():
+            self.apply_action("/usr/bin/systemctl is-enabled %(service)s", service)
+        else:
+            self.apply_action("/sbin/chkconfig --list %(service)s",  service)
         return errors
 
     def status(self, service):
@@ -335,8 +385,10 @@ class Services(object):
 
         @return: 0 for success, integer describing number of errors otherwise
         """
-
-        command_template = "/sbin/service %s status"
+        if use_systemctl():
+            command_template = "/usr/bin/systemctl status %(service)s"
+        else:
+            command_template = "/sbin/service %(service)s status"
         errors = self.apply_action(command_template, service)
 
         return errors
@@ -387,10 +439,9 @@ class Services(object):
 
         errors = 0
         if service:
-            command = command_template % service
-            cmd = command.split()
+            command = command_template % dict(service=pipes.quote(service))
             try:
-                output = check_output(cmd)
+                output = check_output(command, shell=True, stderr=STDOUT)
                 self.pretty_print(command, output)
 
             except CalledProcessError, cpe:
@@ -400,10 +451,9 @@ class Services(object):
             # no service specified, so we will loop through all valid services 
             # and apply the action to each one
             for s in self.depsorted_services(deps):
-                command = command_template % s
-                cmd = command.split()
+                command = command_template % dict(service=pipes.quote(s))
                 try:
-                    output = check_output(cmd)
+                    output = check_output(command, shell=True, stderr=STDOUT)
                     self.pretty_print(command, output)
 
                 except CalledProcessError, cpe:
