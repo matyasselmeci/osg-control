@@ -35,12 +35,7 @@ clean:
 	rm -rf $(DIST_DIR) $(PACKAGE)-*.tar.gz
 
 $(TARBALL_NAME):
-	rm -rf $(DIST_DIR); \
-	mkdir $(DIST_DIR); \
-	svn export . $(DIST_DIR)/$(TARBALL_DIR); \
-	rm $(DIST_DIR)/$(TARBALL_DIR)/Makefile; \
-	tar czfC $(TARBALL_NAME) $(DIST_DIR) $(TARBALL_DIR); \
-	rm -rf $(DIST_DIR); \
+	git archive --prefix=$(TARBALL_DIR)/ HEAD --output=$(TARBALL_NAME)
 
 dist: $(TARBALL_NAME)
 
