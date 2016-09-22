@@ -284,7 +284,7 @@ class Services(object):
         @return: 0 for success, integer describing number of errors otherwise
         """
         if use_systemctl():
-            command_template = "/usr/bin/systemctl start %(service)s && /usr/bin/systemctl is-active %(service)s"
+            command_template = "/usr/bin/systemctl start %(service)s && /usr/bin/systemctl show %(service)s -p ActiveState"
         else:
             command_template = "/sbin/service %(service)s start"
         order = ['condor-cron', 'rsv']
@@ -303,7 +303,7 @@ class Services(object):
         @return: 0 for success, integer describing number of errors otherwise
         """
         if use_systemctl():
-            command_template = "/usr/bin/systemctl stop %(service)s && /usr/bin/systemctl is-active %(service)s"
+            command_template = "/usr/bin/systemctl stop %(service)s && /usr/bin/systemctl show %(service)s -p ActiveState"
         else:
             command_template = "/sbin/service %(service)s stop"
         order = ['rsv', 'condor-cron']
@@ -386,7 +386,7 @@ class Services(object):
         @return: 0 for success, integer describing number of errors otherwise
         """
         if use_systemctl():
-            command_template = "/usr/bin/systemctl status %(service)s"
+            command_template = "/usr/bin/systemctl status %(service)s -n0"
         else:
             command_template = "/sbin/service %(service)s status"
         errors = self.apply_action(command_template, service)
